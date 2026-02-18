@@ -87,7 +87,8 @@ void wClient::onErrorOccured(QAbstractSocket::SocketError error) {
     else if (currPageIndex == 1) ui.infoLabel2->setText(errInfo);
 }
 
-void wClient::processServerResponse() {}
+void wClient::processServerResponse() {
+}
 
 void wClient::loginBtnClicked() {
     QString username = ui.loginField->text();
@@ -95,17 +96,11 @@ void wClient::loginBtnClicked() {
     bool hasErr = false;
 
     if (username.isEmpty()) {
-        ui.loginField->setStyleSheet("border: 2px solid red;");
-        QTimer::singleShot(2000, ui.loginField, [this]() {
-            ui.loginField->setStyleSheet("");
-            });
+        highlightFieldErr(ui.loginField);
         hasErr = true;
     }
     if (password.isEmpty()) {
-        ui.passwordField->setStyleSheet("border: 2px solid red;");
-        QTimer::singleShot(2000, ui.passwordField, [this]() {
-            ui.passwordField->setStyleSheet("");
-            });
+        highlightFieldErr(ui.passwordField);
         hasErr = true;
     }
     if (hasErr) return;
@@ -122,15 +117,28 @@ void wClient::regBtnClicked() {
     QString password2 = ui.regPassField2->text();
     bool hasErr = false;
 
-    if (password1 != password2) {
-        ui.regPassField->setStyleSheet("border: 2px solid red;");
-        ui.regPassField2->setStyleSheet("border: 2px solid red;");
-        QTimer::singleShot(2000, this, [this]() {
-            ui.regPassField->setStyleSheet("");
-            ui.regPassField2->setStyleSheet("");
-            });
-        return;
+    if (password1 != password2 || password1.isEmpty()) {
+        highlightFieldErr(ui.regPassField);
+        highlightFieldErr(ui.regPassField2);
+        hasErr = true;
     }
+    if (username.isEmpty()) {
+        highlightFieldErr(ui.regLoginField);
+        hasErr = true;
+    }
+    if (hasErr) return;
+
+    int qCode = static_cast<int>(clientQuery::Register);
+    QString strMsg = QString("%1 %2 %3").arg(qCode).arg(username).arg(password1);
+    QByteArray bArrMsg = strMsg.toUtf8();
+    socket.write(bArrMsg);
+}
+
+void wClient::highlightFieldErr(QLineEdit* field) {
+    field->setStyleSheet("border: 2px solid red;");
+    QTimer::singleShot(2000, field, [field]() {
+        field->setStyleSheet("");
+        });
 }
 
 wClient::~wClient()

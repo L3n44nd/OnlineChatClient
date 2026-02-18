@@ -28,6 +28,6 @@ private:
     void setupUI();
     void setupClient();
     void setupTimer();
-
+    void highlightFieldErr(QLineEdit* field);
 };
 
