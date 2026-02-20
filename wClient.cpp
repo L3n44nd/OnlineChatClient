@@ -37,12 +37,13 @@ void wClient::setupUI() {
             ui.tabChat->removeTab(index);
         }
         });
-
+    connect(ui.logoutBtn, &QPushButton::clicked, this, &wClient::logoutBtnClicked);
 }
 
 void wClient::setupClient() {
     connect(&socket, &QTcpSocket::connected, this, [this]() {
         reconnectTimer->stop();
+        emit connectionRestored();
         ui.infoLabel->clear();
         ui.infoLabel2->clear();
         ui.loginBtn->setEnabled(true);
@@ -51,6 +52,9 @@ void wClient::setupClient() {
         });
     connect(&socket, &QTcpSocket::readyRead, this, &wClient::processServerResponse);
     connect(&socket, &QTcpSocket::errorOccurred, this, &wClient::onErrorOccured);
+    connect(&socket, &QTcpSocket::disconnected, this, [this]() {
+        emit connectionLost();
+        });
 
     socket.connectToHost(QHostAddress::LocalHost, 1402);
 }
@@ -72,6 +76,7 @@ void wClient::onErrorOccured(QAbstractSocket::SocketError error) {
     QString errInfo;
     int currPageIndex = ui.stackedWidget->currentIndex();
 
+    emit connectionLost();
     reconnectTimer->start();
 
     ui.registerBtn->setEnabled(false);
@@ -95,6 +100,7 @@ void wClient::onErrorOccured(QAbstractSocket::SocketError error) {
     }
     if (currPageIndex == 0) ui.infoLabel->setText(errInfo);
     else if (currPageIndex == 1) ui.infoLabel2->setText(errInfo);
+    else return;
 }
 
 void wClient::processServerResponse() {
@@ -146,14 +152,14 @@ void wClient::processServerResponse() {
         emit nameChangeRejected(toStr(serverResponse::NameTooLong));
         break;
     case serverResponse::Message:
-        handleMessage("textMsg");
+        handleMessage(parts[1], parts[2], parts[3]);
         break;
     case serverResponse::PrivateMessage:
+        handlePrivateMessage(parts[1], parts[2], parts[3]);
         break;
     default:
         break;
     }
-
 }
 
 void wClient::loginBtnClicked() {
@@ -211,7 +217,9 @@ void wClient::changeNameClicked() {
     dialog.exec();
 }
 
-void wClient::handleMessage(QString msg) {}
+void wClient::handleMessage(QString senderId, QString senderName, QString msg) {}
+
+void wClient::handlePrivateMessage(QString senderId, QString senderName, QString msg) {}
 
 void wClient::highlightFieldErr(QLineEdit* field) {
     field->setStyleSheet("border: 2px solid red;");
@@ -220,7 +228,16 @@ void wClient::highlightFieldErr(QLineEdit* field) {
         });
 }
 
-wClient::~wClient()
-{}
+void wClient::logoutBtnClicked() {
+    ui.loginField->clear();
+    ui.passwordField->clear();
+    ui.statusLabel->clear();
+    ui.statusLabel2->clear();
+    ui.stackedWidget->setCurrentIndex(0);
+    int qCode = static_cast<int>(clientQuery::Logout);
+    socket.write(QByteArray::number(qCode));
+    
+}
 
+wClient::~wClient() {}
 

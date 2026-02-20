@@ -18,14 +18,18 @@ public:
 signals:
     void nameChangeAccepted(QString info);
     void nameChangeRejected(QString reason);
+    void connectionLost();
+    void connectionRestored();
 
 private slots:
     void processServerResponse();
     void onErrorOccured(QAbstractSocket::SocketError);
     void loginBtnClicked();
     void regBtnClicked();
-    void handleMessage(QString msg);
+    void handleMessage(QString senderId, QString senderName, QString msg);
+    void handlePrivateMessage(QString senderId, QString senderName, QString msg);
     void changeNameClicked();
+    void logoutBtnClicked();
 
 private:
     Ui::wClientClass ui;
@@ -34,7 +38,6 @@ private:
 
     void setupUI();
     void setupClient();
-    void setupTimer();
-    
+    void setupTimer(); 
 };
 
