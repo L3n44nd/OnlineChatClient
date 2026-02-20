@@ -5,8 +5,7 @@ nameChangeDialog::nameChangeDialog(QWidget* parent)
 	: QDialog(parent)
 {
 	ui.setupUi(this);
-	ui.changeNameField->setTextMargins(5, 0, 0, 0);
-
+	
 	connect(ui.changeNameBtn, &QPushButton::clicked, this, &nameChangeDialog::tryToChangeName);
 	connect(qobject_cast<wClient*>(parent), &wClient::nameChangeAccepted, this, [this](QString info) {
 		ui.changeNameLabel->setStyleSheet("color: #aaff7f");
@@ -34,4 +33,5 @@ void nameChangeDialog::tryToChangeName() {
 
 nameChangeDialog::~nameChangeDialog()
 {}
+
 
