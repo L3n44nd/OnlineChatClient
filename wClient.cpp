@@ -1,4 +1,5 @@
 ﻿#include "wClient.h"
+#include "nameChangeDialog.h"
 
 wClient::wClient(QWidget *parent)
     : QWidget(parent)
@@ -25,8 +26,22 @@ void wClient::setupUI() {
         ui.stackedWidget->setCurrentIndex(0);
         });
 
+    connect(ui.nameChangeBtn, &QPushButton::clicked, this, &wClient::changeNameClicked);
+
     connect(ui.loginBtn, &QPushButton::clicked, this, &wClient::loginBtnClicked);
+    connect(ui.loginField, &QLineEdit::returnPressed, this, &wClient::loginBtnClicked);
+    connect(ui.passwordField, &QLineEdit::returnPressed, this, &wClient::loginBtnClicked);
+
     connect(ui.regBtn, &QPushButton::clicked, this, &wClient::regBtnClicked);
+    connect(ui.regLoginField, &QLineEdit::returnPressed, this, &wClient::regBtnClicked);
+    connect(ui.regPassField, &QLineEdit::returnPressed, this, &wClient::regBtnClicked);
+    connect(ui.regPassField2, &QLineEdit::returnPressed, this, &wClient::regBtnClicked);
+
+    connect(ui.tabChat, &QTabWidget::tabCloseRequested, this, [this](int index) {
+        if (index != 0) {
+            ui.tabChat->removeTab(index);
+        }
+        });
 
 }
 
@@ -88,6 +103,62 @@ void wClient::onErrorOccured(QAbstractSocket::SocketError error) {
 }
 
 void wClient::processServerResponse() {
+    QByteArray utf8msg = socket.readAll();
+    QString strmsg = QString::fromUtf8(utf8msg);
+    QStringList parts = strmsg.split(' ');
+    int code = parts[0].toInt();
+    serverResponse response = static_cast<serverResponse>(code);
+    switch (response)
+    {
+    case serverResponse::Successful:
+        emit nameChangeAccepted(toStr(serverResponse::Successful));
+        ui.nameField->setText(strmsg.section(' ', 1));
+        break;
+    case serverResponse::Registered:
+        ui.statusLabel2->setStyleSheet("color: #aaff7f");
+        ui.statusLabel2->setText(toStr(serverResponse::Registered));
+        QTimer::singleShot(2000, this, [this, parts]() {
+            ui.uidField->setText(parts[1]);
+            ui.nameField->setText(parts[2]);
+            ui.stackedWidget->setCurrentIndex(2);
+            });
+        break;
+    case serverResponse::LoginOK:
+        ui.statusLabel->setStyleSheet("color: #aaff7f");
+        ui.statusLabel->setText(toStr(serverResponse::LoginOK));
+        QTimer::singleShot(2000, this, [this, parts]() {
+            ui.uidField->setText(parts[1]);
+            ui.nameField->setText(parts[2]);
+            ui.stackedWidget->setCurrentIndex(2);
+            });
+        break;
+    case serverResponse::WrongPassword:
+        ui.statusLabel->setStyleSheet("color: #ffaa00");
+        ui.statusLabel->setText(toStr(serverResponse::WrongPassword));
+        break;
+    case serverResponse::UserNotFound:
+        ui.statusLabel->setStyleSheet("color: #ffaa00");
+        ui.statusLabel->setText(toStr(serverResponse::UserNotFound));
+        break;
+    case serverResponse::UsernameExists:
+        if (ui.stackedWidget->currentIndex() == 1) {
+            ui.statusLabel2->setStyleSheet("color: #ffaa00");
+            ui.statusLabel2->setText(toStr(serverResponse::UsernameExists));
+        }
+        else emit nameChangeRejected(toStr(serverResponse::UsernameExists));
+        break;
+    case serverResponse::NameTooLong:
+        emit nameChangeRejected(toStr(serverResponse::NameTooLong));
+        break;
+    case serverResponse::Message:
+        handleMessage("textMsg");
+        break;
+    case serverResponse::PrivateMessage:
+        break;
+    default:
+        break;
+    }
+
 }
 
 void wClient::loginBtnClicked() {
@@ -133,6 +204,19 @@ void wClient::regBtnClicked() {
     QByteArray bArrMsg = strMsg.toUtf8();
     socket.write(bArrMsg);
 }
+
+void wClient::changeNameClicked() {
+    nameChangeDialog dialog(this);
+    connect(&dialog, &nameChangeDialog::changeNameBtnClicked, this, [this](QString newName) {
+        int qCode = static_cast<int>(clientQuery::NameChange);
+        QString strQuery = QString("%1 %2").arg(qCode).arg(std::move(newName));
+        QByteArray bArrQuery = strQuery.toUtf8();
+        socket.write(bArrQuery);
+        });
+    dialog.exec();
+}
+
+void wClient::handleMessage(QString msg) {}
 
 void wClient::highlightFieldErr(QLineEdit* field) {
     field->setStyleSheet("border: 2px solid red;");
