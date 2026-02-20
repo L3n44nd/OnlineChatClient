@@ -13,11 +13,6 @@ void wClient::setupUI() {
     ui.setupUi(this);
     this->setLayout(ui.mainLayout);
     ui.stackedWidget->setCurrentIndex(0);
-    ui.loginField->setTextMargins(5, 0, 0, 0); 
-    ui.passwordField->setTextMargins(5, 0, 0, 0);
-    ui.regPassField->setTextMargins(5, 0, 0, 0);
-    ui.regLoginField->setTextMargins(5, 0, 0, 0);
-    ui.regPassField2->setTextMargins(5, 0, 0, 0);
     
     connect(ui.registerBtn, &QPushButton::clicked, this, [this]() {
         ui.stackedWidget->setCurrentIndex(1);
@@ -227,4 +222,5 @@ void wClient::highlightFieldErr(QLineEdit* field) {
 
 wClient::~wClient()
 {}
+
 
