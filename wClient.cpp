@@ -217,6 +217,16 @@ void wClient::changeNameClicked() {
     dialog.exec();
 }
 
+void wClient::logoutBtnClicked() {
+    ui.loginField->clear();
+    ui.passwordField->clear();
+    ui.statusLabel->clear();
+    ui.statusLabel2->clear();
+    ui.stackedWidget->setCurrentIndex(0);
+    int qCode = static_cast<int>(clientQuery::Logout);
+    socket.write(QByteArray::number(qCode));
+}
+
 void wClient::handleMessage(QString senderId, QString senderName, QString msg) {}
 
 void wClient::handlePrivateMessage(QString senderId, QString senderName, QString msg) {}
@@ -228,16 +238,6 @@ void wClient::highlightFieldErr(QLineEdit* field) {
         });
 }
 
-void wClient::logoutBtnClicked() {
-    ui.loginField->clear();
-    ui.passwordField->clear();
-    ui.statusLabel->clear();
-    ui.statusLabel2->clear();
-    ui.stackedWidget->setCurrentIndex(0);
-    int qCode = static_cast<int>(clientQuery::Logout);
-    socket.write(QByteArray::number(qCode));
-    
-}
-
 wClient::~wClient() {}
+
 
