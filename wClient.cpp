@@ -141,30 +141,32 @@ void wClient::processServerResponse(const QByteArray& utf8msg) {
         ui.statusLabel2->setText(toStr(serverResponse::Registered));
         ui.uidField->setText(parts[1]);
         ui.nameField->setText(parts[2]);
+        sendPacket(clientQuery::GetHistory, 0);
         QTimer::singleShot(2000, this, [this, parts]() {
             ui.stackedWidget->setCurrentIndex(2);
             });
         break;
     case serverResponse::LoginOK:
-        ui.statusLabel->setStyleSheet("color: #aaff7f");
+        ui.statusLabel->setStyleSheet("color: #aaff7f; font: 700 9pt 'Century Gothic'");
         ui.statusLabel->setText(toStr(serverResponse::LoginOK));
         ui.uidField->setText(parts[1]);
         ui.nameField->setText(parts[2]);
-        QTimer::singleShot(2000, this, [this, parts]() {
+        sendPacket(clientQuery::GetHistory, 0);
+        QTimer::singleShot(2000, this, [this, parts]() {     
             ui.stackedWidget->setCurrentIndex(2);
             });
         break;
     case serverResponse::WrongPassword:
-        ui.statusLabel->setStyleSheet("color: #ffaa00");
+        ui.statusLabel->setStyleSheet("color: #ffaa00; font: 700 9pt 'Century Gothic'");
         ui.statusLabel->setText(toStr(serverResponse::WrongPassword));
         break;
     case serverResponse::UserNotFound:
-        ui.statusLabel->setStyleSheet("color: #ffaa00");
+        ui.statusLabel->setStyleSheet("color: #ffaa00; font: 700 9pt 'Century Gothic'");
         ui.statusLabel->setText(toStr(serverResponse::UserNotFound));
         break;
     case serverResponse::UsernameExists:
         if (ui.stackedWidget->currentIndex() == 1) {
-            ui.statusLabel2->setStyleSheet("color: #ffaa00");
+            ui.statusLabel2->setStyleSheet("color: #ffaa00; font: 700 9pt 'Century Gothic'");
             ui.statusLabel2->setText(toStr(serverResponse::UsernameExists));
         }
         else emit nameChangeRejected(toStr(serverResponse::UsernameExists));
@@ -181,6 +183,17 @@ void wClient::processServerResponse(const QByteArray& utf8msg) {
     case serverResponse::UpdateOnline:
         updateOnline(strmsg.section(' ', 1));
         break;
+    case serverResponse::SendHistory: {
+        int userId = strmsg.section(' ', 1, 1).toInt();
+        if (userId == 0) {
+            loadHistory(strmsg.section(' ', 2), ui.chatField);
+            break;
+        }
+        if (!idToField.contains(userId)) break;
+        QTextEdit* field = idToField[userId];
+        loadHistory(strmsg.section(' ', 2), field);
+        break;
+    }
     default:
         break;
     }
@@ -201,10 +214,8 @@ void wClient::loginBtnClicked() {
     }
     if (hasErr) return;
 
-    int qCode = static_cast<int>(clientQuery::Login);
-    QString strQuery = QString("%1 %2 %3").arg(qCode).arg(username).arg(password);
-
-    sendPacket(strQuery);
+    QString query = QString("%1 %2").arg(username).arg(password);
+    sendPacket(clientQuery::Login, query);
 }
 
 void wClient::regBtnClicked() {
@@ -224,18 +235,19 @@ void wClient::regBtnClicked() {
     }
     if (hasErr) return;
 
-    int qCode = static_cast<int>(clientQuery::Register);
-    QString strQuery = QString("%1 %2 %3").arg(qCode).arg(username).arg(password1);
-    
-    sendPacket(strQuery);
+    if (password1.length() < 8) {
+        ui.statusLabel2->setText("<font color='#ffaa00'>Слишком короткий пароль</font>");
+        return;
+    }
+
+    QString query = QString("%1 %2").arg(username).arg(password1); 
+    sendPacket(clientQuery::Register, query);
 }
 
 void wClient::changeNameClicked() {
     nameChangeDialog dialog(this);
     connect(&dialog, &nameChangeDialog::changeNameBtnClicked, this, [this](QString newName) {
-        int qCode = static_cast<int>(clientQuery::NameChange);
-        QString strQuery = QString("%1 %2").arg(qCode).arg(std::move(newName));
-        sendPacket(strQuery);
+        sendPacket(clientQuery::NameChange, newName);
         });
     dialog.exec();
 }
@@ -246,10 +258,9 @@ void wClient::logoutBtnClicked() {
     ui.statusLabel->clear();
     ui.statusLabel2->clear();
     ui.stackedWidget->setCurrentIndex(0);
+    ui.chatField->clear();
 
-    int qCode = static_cast<int>(clientQuery::Logout);
-    QString strQuery = QString::number(qCode);
-    sendPacket(strQuery);
+    sendPacket(clientQuery::Logout);
 }
 
 void wClient::privateMsgBtnClicked(const QString& username) {
@@ -264,17 +275,18 @@ void wClient::privateMsgBtnClicked(const QString& username) {
 
         idToTabIndex[recipientId] = ui.tabChat->addTab(newTab, username);
         idToField[recipientId] = oField;
+        sendPacket(clientQuery::GetHistory, QString::number(recipientId));
     }
     ui.tabChat->setCurrentIndex(idToTabIndex[recipientId]);
 }
 
 void wClient::handleMessage(QString senderName, QString msg) {
-    QString textForChat = QString("%1: %2").arg(senderName).arg(msg);
+    QString textForChat = QString("<font color='#4a875d'>%1</font>: %2").arg(senderName).arg(msg);
     ui.chatField->append(textForChat);
 }
 
 void wClient::handlePrivateMessage(QString senderId, QString senderName, QString msg) {
-    QString textForChat = QString("%1: %2").arg(senderName).arg(msg);
+    QString textForChat = QString("<font color='#4a875d'>%1</font>: %2").arg(senderName).arg(msg);
     if (idToField.find(senderId.toInt()) != idToField.end()) {
         QTextEdit* targetField = idToField[senderId.toInt()];
         targetField->append(textForChat);
@@ -299,32 +311,29 @@ void wClient::sendMessage() {
         return;
     }
 
-    int qCode = -1;
     QString selfName = ui.nameField->text();
-    QString textForChat = QString("%1 (Вы): %2").arg(selfName).arg(textFromField);
-    QString strQuery;
+    QString textForChat = QString("<font color='#ff0033'>%1 (Вы):</font> %2").arg(selfName).arg(textFromField);
 
     if (ui.tabChat->currentIndex() == 0) {
-        qCode = static_cast<int>(clientQuery::Message);
-        strQuery = QString("%1 %2").arg(QString::number(qCode)).arg(textFromField);
+        sendPacket(clientQuery::Message, textFromField);
         ui.chatField->append(textForChat);
         ui.iField->clear();
     }
     else {
-        qCode = static_cast<int>(clientQuery::PrivateMessage);
-        int currTabIndex = ui.tabChat->currentIndex();
-        QString recipient = ui.tabChat->tabText(currTabIndex);
+        QString recipient = ui.tabChat->tabText(ui.tabChat->currentIndex());
         int recipientId = onlineUsers[recipient];
-        strQuery = QString("%1 %2 %3").arg(QString::number(qCode)).arg(QString::number(recipientId)).arg(textFromField);
+        QString query = QString("%1 %2").arg(QString::number(recipientId)).arg(textFromField);
+
+        sendPacket(clientQuery::PrivateMessage, query);
         idToField[recipientId]->append(textForChat);
         ui.iField->clear();
     }
-
-    sendPacket(strQuery);
 }
 
-void wClient::sendPacket(const QString& data) {
-    QByteArray bArrData = data.toUtf8();
+void wClient::sendPacket(const clientQuery query, const QString& data) {
+    int queryCode = static_cast<int>(query);
+    QString formatedData = data.isEmpty() ? QString::number(queryCode) : QString("%1 %2").arg(queryCode).arg(data);
+    QByteArray bArrData = formatedData.toUtf8();
     int dataSize = bArrData.size();
     QByteArray packet = QByteArray::number(dataSize).rightJustified(4, '0') + bArrData;
     socket.write(packet);
@@ -333,14 +342,14 @@ void wClient::sendPacket(const QString& data) {
 void wClient::updateOnline(const QString& onlineList) {
     if (onlineList.isEmpty()) return;
 
-    QStringList parts = onlineList.split(' ');
+    QStringList parts = onlineList.split('\n');
     int selfId = (ui.uidField->text()).toInt();
     ui.listOnline->clear();
     onlineUsers.clear();
 
-    for (int i = 0; i + 1 < parts.size(); i += 2) {
-        QString username = parts[i + 1];
-        int userId = parts[i].toInt();
+    for (int i = 0; i < parts.size(); ++i) {
+        int userId = parts[i].section(' ', 0, 0).toInt();
+        QString username = parts[i].section(' ', 1);
         onlineUsers[username] = userId;
 
         bool isSelf = selfId == userId;
@@ -349,6 +358,18 @@ void wClient::updateOnline(const QString& onlineList) {
         if (!isSelf) connect(onlineUserWidget, &OnlineWidget::writeBtnClicked, this, &wClient::privateMsgBtnClicked);
         item->setSizeHint(onlineUserWidget->sizeHint());
         ui.listOnline->setItemWidget(item, onlineUserWidget);
+    }
+}
+
+void wClient::loadHistory(const QString& history, QTextEdit* field){
+    if (history.isEmpty()) return;
+    QStringList parts = history.split('\n');
+    for (int i = 0; i < parts.size(); ++i) {
+        int senderId = parts[i].section(' ', 0, 0).toInt();
+        QString senderName = parts[i].section(' ', 1, 1);
+        QString msg = parts[i].section(' ', 2);
+        if (senderId == ui.uidField->text().toInt()) field->append(QString("<font color='#ff0033'>%1 (Вы):</font> %2").arg(senderName).arg(msg));
+        else field->append(QString("<font color='#4a875d'>%1:</font> %2").arg(senderName).arg(msg));
     }
 }
 

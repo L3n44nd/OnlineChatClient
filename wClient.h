@@ -34,8 +34,9 @@ private slots:
     void handleMessage(QString senderName, QString msg);
     void handlePrivateMessage(QString senderId, QString senderName, QString msg);
     void sendMessage();
-    void sendPacket(const QString& data);
+    void sendPacket(const clientQuery query, const QString& data = QString());
     void updateOnline(const QString& onlineList); 
+    void loadHistory(const QString& history, QTextEdit* field);
 
 private:
     bool waitingForDataSize = true;
