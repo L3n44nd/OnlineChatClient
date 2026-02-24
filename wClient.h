@@ -2,6 +2,7 @@
 
 #include <QtNetwork/qtcpsocket.h>
 #include <QString>
+#include <QTabWidget>
 #include <qtimer.h>
 #include "ui_wClient.h"
 #include "\repos\wServer\Common\protocol.h"

@@ -11,10 +11,13 @@ wClient::wClient(QWidget *parent)
 }
 
 void wClient::setupUI() {
+
+    
     ui.setupUi(this);
     this->setLayout(ui.mainLayout);
+    ui.statusField3->setParent(ui.tabChat);
     ui.stackedWidget->setCurrentIndex(0);
-    
+
     connect(ui.registerBtn, &QPushButton::clicked, this, [this]() {
         ui.stackedWidget->setCurrentIndex(1);
         });
@@ -26,7 +29,8 @@ void wClient::setupUI() {
     connect(ui.tabChat, &QTabWidget::tabCloseRequested, this, [this](int index) {
         if (index != 0) {
             QString username = ui.tabChat->tabText(index);
-            int userId = onlineUsers[username];
+            int userId = tabIndexToId[index];
+            tabIndexToId.remove(index);
             ui.tabChat->removeTab(index);
             idToTabIndex.remove(userId);
             idToField.remove(userId);
@@ -137,36 +141,46 @@ void wClient::onErrorOccured(QAbstractSocket::SocketError error) {
 
 void wClient::processServerResponse(const QByteArray& utf8msg) {
     QString strmsg = QString::fromUtf8(utf8msg);
-    QStringList parts = strmsg.split(' ');
-    int code = parts[0].toInt();
+    int code = strmsg.section(' ', 0, 0).toInt();
+    QString data = strmsg.section(' ', 1);
     serverResponse response = static_cast<serverResponse>(code);
 
     switch (response)
     {
     case serverResponse::Successful:
         emit nameChangeAccepted(toStr(serverResponse::Successful));
-        ui.nameField->setText(strmsg.section(' ', 1));
+        ui.nameField->setText(data);
         break;
-    case serverResponse::Registered:
-        ui.statusLabel2->setStyleSheet("color: #aaff7f");
+    case serverResponse::Registered: {
+        ui.statusLabel2->setStyleSheet("color: #aaff7f; font: 700 9pt 'Century Gothic'");
         ui.statusLabel2->setText(toStr(serverResponse::Registered));
-        ui.uidField->setText(parts[1]);
-        ui.nameField->setText(parts[2]);
+
+        QString uid = data.section('\n', 0, 0);
+        QString username = data.section('\n', 1);
+        ui.uidField->setText(uid);
+        ui.nameField->setText(username);
+
         sendPacket(clientQuery::GetHistory, 0);
-        QTimer::singleShot(2000, this, [this, parts]() {
+        QTimer::singleShot(2000, this, [this]() {
             ui.stackedWidget->setCurrentIndex(2);
             });
         break;
-    case serverResponse::LoginOK:
+    }
+    case serverResponse::LoginOK: {
         ui.statusLabel->setStyleSheet("color: #aaff7f; font: 700 9pt 'Century Gothic'");
         ui.statusLabel->setText(toStr(serverResponse::LoginOK));
-        ui.uidField->setText(parts[1]);
-        ui.nameField->setText(parts[2]);
+
+        QString uid = data.section('\n', 0, 0);
+        QString username = data.section('\n', 1);
+        ui.uidField->setText(uid);
+        ui.nameField->setText(username);
+
         sendPacket(clientQuery::GetHistory, 0);
-        QTimer::singleShot(2000, this, [this, parts]() {     
+        QTimer::singleShot(2000, this, [this]() {
             ui.stackedWidget->setCurrentIndex(2);
             });
         break;
+    }
     case serverResponse::WrongPassword:
         ui.statusLabel->setStyleSheet("color: #ffaa00; font: 700 9pt 'Century Gothic'");
         ui.statusLabel->setText(toStr(serverResponse::WrongPassword));
@@ -185,24 +199,31 @@ void wClient::processServerResponse(const QByteArray& utf8msg) {
     case serverResponse::NameTooLong:
         emit nameChangeRejected(toStr(serverResponse::NameTooLong));
         break;
-    case serverResponse::Message:
-        handleMessage(parts[1], parts[2]);
+    case serverResponse::Message: {
+        QString sender = data.section('\n', 0, 0);
+        QString msg = data.section('\n', 1);
+        handleMessage(sender, msg);
         break;
-    case serverResponse::PrivateMessage:
-        handlePrivateMessage(parts[1], parts[2], parts[3]);
+    }
+    case serverResponse::PrivateMessage: {
+        QString senderId = data.section('\n', 0, 0);
+        QString senderName = data.section('\n', 1, 1);
+        QString msg = data.section('\n', 2);
+        handlePrivateMessage(senderId, senderName, msg);
         break;
+    }
     case serverResponse::UpdateOnline:
-        updateOnline(strmsg.section(' ', 1));
+        updateOnline(data);
         break;
     case serverResponse::SendHistory: {
-        int userId = strmsg.section(' ', 1, 1).toInt();
+        int userId = data.section('\n', 0, 0).toInt();
         if (userId == 0) {
-            loadHistory(strmsg.section(' ', 2), ui.chatField);
+            loadHistory(data.section('\n', 1), ui.chatField);
             break;
         }
         if (!idToField.contains(userId)) break;
         QTextEdit* field = idToField[userId];
-        loadHistory(strmsg.section(' ', 2), field);
+        loadHistory(data.section('\n', 1), field);
         break;
     }
     default:
@@ -225,7 +246,7 @@ void wClient::loginBtnClicked() {
     }
     if (hasErr) return;
 
-    QString query = QString("%1 %2").arg(username).arg(password);
+    QString query = QString("%1\n%2").arg(username).arg(password);
     sendPacket(clientQuery::Login, query);
 }
 
@@ -251,7 +272,7 @@ void wClient::regBtnClicked() {
         return;
     }
 
-    QString query = QString("%1 %2").arg(username).arg(password1); 
+    QString query = QString("%1\n%2").arg(username).arg(password1); 
     sendPacket(clientQuery::Register, query);
 }
 
@@ -283,9 +304,12 @@ void wClient::privateMsgBtnClicked(const QString& username) {
 
         oField->setReadOnly(true);
         oField->setFixedSize(680, 460);
-
-        idToTabIndex[recipientId] = ui.tabChat->addTab(newTab, username);
+            
+        int index = ui.tabChat->addTab(newTab, username);
+        idToTabIndex[recipientId] = index;
+        tabIndexToId[index] = recipientId;
         idToField[recipientId] = oField;
+
         sendPacket(clientQuery::GetHistory, QString::number(recipientId));
     }
     ui.tabChat->setCurrentIndex(idToTabIndex[recipientId]);
@@ -310,7 +334,9 @@ void wClient::handlePrivateMessage(QString senderId, QString senderName, QString
         oField->setFixedSize(680, 460);
         oField->append(textForChat);
 
-        idToTabIndex[senderId.toInt()] = ui.tabChat->addTab(newTab, senderName);
+        int index = ui.tabChat->addTab(newTab, senderName);
+        idToTabIndex[senderId.toInt()] = index;
+        tabIndexToId[index] = senderId.toInt();
         idToField[senderId.toInt()] = oField;
     }
 }
@@ -328,17 +354,15 @@ void wClient::sendMessage() {
     if (ui.tabChat->currentIndex() == 0) {
         sendPacket(clientQuery::Message, textFromField);
         ui.chatField->append(textForChat);
-        ui.iField->clear();
     }
     else {
-        QString recipient = ui.tabChat->tabText(ui.tabChat->currentIndex());
-        int recipientId = onlineUsers[recipient];
-        QString query = QString("%1 %2").arg(QString::number(recipientId)).arg(textFromField);
+        int recipientId = tabIndexToId[ui.tabChat->currentIndex()];
+        QString query = QString("%1\n%2").arg(QString::number(recipientId)).arg(textFromField);
 
         sendPacket(clientQuery::PrivateMessage, query);
         idToField[recipientId]->append(textForChat);
-        ui.iField->clear();
     }
+    ui.iField->clear();
 }
 
 void wClient::sendPacket(const clientQuery query, const QString& data) {
@@ -353,32 +377,45 @@ void wClient::sendPacket(const clientQuery query, const QString& data) {
 void wClient::updateOnline(const QString& onlineList) {
     if (onlineList.isEmpty()) return;
 
-    QStringList parts = onlineList.split('\n');
+    QStringList parts = onlineList.split("\n\n");
     int selfId = (ui.uidField->text()).toInt();
     ui.listOnline->clear();
     onlineUsers.clear();
 
     for (int i = 0; i < parts.size(); ++i) {
-        int userId = parts[i].section(' ', 0, 0).toInt();
-        QString username = parts[i].section(' ', 1);
+        int userId = parts[i].section('\n', 0, 0).toInt();
+        QString username = parts[i].section('\n', 1);
         onlineUsers[username] = userId;
+        if (idToTabIndex.contains(userId)) ui.tabChat->setTabText(idToTabIndex[userId], username);
 
-        bool isSelf = selfId == userId;
-        QListWidgetItem* item = new QListWidgetItem(ui.listOnline);
-        OnlineWidget* onlineUserWidget = new OnlineWidget(username, this, isSelf);
-        if (!isSelf) connect(onlineUserWidget, &OnlineWidget::writeBtnClicked, this, &wClient::privateMsgBtnClicked);
-        item->setSizeHint(onlineUserWidget->sizeHint());
-        ui.listOnline->setItemWidget(item, onlineUserWidget);
+        QListWidgetItem* item = new QListWidgetItem(ui.listOnline);       
+        QPushButton* writeBtn = new QPushButton(username, this);
+        writeBtn->setFixedSize(185, 20);
+        writeBtn->setStyleSheet("font: 700 9pt 'Century Gothic';"); 
+
+        if (selfId != userId) {
+            connect(writeBtn, &QPushButton::clicked, this, [username, this]() {
+                privateMsgBtnClicked(username);
+                });
+            writeBtn->setStyleSheet(
+                "font: 700 9pt 'Century Gothic';"
+                "background-color: rgb(115, 115, 86);"
+                "color: rgb(39, 39, 28);");
+        }
+        else writeBtn->setEnabled(false);
+        item->setSizeHint(writeBtn->size());
+        ui.listOnline->setItemWidget(item, writeBtn);
     }
 }
 
-void wClient::loadHistory(const QString& history, QTextEdit* field){
+void wClient::loadHistory(const QString& history, QTextEdit* field) {
     if (history.isEmpty()) return;
-    QStringList parts = history.split('\n');
+    QStringList parts = history.split("\n\n");
     for (int i = 0; i < parts.size(); ++i) {
-        int senderId = parts[i].section(' ', 0, 0).toInt();
-        QString senderName = parts[i].section(' ', 1, 1);
-        QString msg = parts[i].section(' ', 2);
+        int senderId = parts[i].section('\n', 0, 0).toInt();
+        QString senderName = parts[i].section('\n', 1, 1);
+        QString msg = parts[i].section('\n', 2);
+
         if (senderId == ui.uidField->text().toInt()) field->append(QString("<font color='#ff0033'>%1 (Вы):</font> %2").arg(senderName).arg(msg));
         else field->append(QString("<font color='#4a875d'>%1:</font> %2").arg(senderName).arg(msg));
     }
