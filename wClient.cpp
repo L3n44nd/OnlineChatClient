@@ -18,20 +18,10 @@ void wClient::setupUI() {
     connect(ui.registerBtn, &QPushButton::clicked, this, [this]() {
         ui.stackedWidget->setCurrentIndex(1);
         });
+
     connect(ui.backBtn, &QPushButton::clicked, this, [this]() {
         ui.stackedWidget->setCurrentIndex(0);
         });
-
-    connect(ui.nameChangeBtn, &QPushButton::clicked, this, &wClient::changeNameClicked);
-
-    connect(ui.loginBtn, &QPushButton::clicked, this, &wClient::loginBtnClicked);
-    connect(ui.loginField, &QLineEdit::returnPressed, this, &wClient::loginBtnClicked);
-    connect(ui.passwordField, &QLineEdit::returnPressed, this, &wClient::loginBtnClicked);
-
-    connect(ui.regBtn, &QPushButton::clicked, this, &wClient::regBtnClicked);
-    connect(ui.regLoginField, &QLineEdit::returnPressed, this, &wClient::regBtnClicked);
-    connect(ui.regPassField, &QLineEdit::returnPressed, this, &wClient::regBtnClicked);
-    connect(ui.regPassField2, &QLineEdit::returnPressed, this, &wClient::regBtnClicked);
 
     connect(ui.tabChat, &QTabWidget::tabCloseRequested, this, [this](int index) {
         if (index != 0) {
@@ -42,8 +32,23 @@ void wClient::setupUI() {
             idToField.remove(userId);
         }
         });
-    connect(ui.logoutBtn, &QPushButton::clicked, this, &wClient::logoutBtnClicked);
+
+    connect(ui.regBtn, &QPushButton::clicked, this, &wClient::regBtnClicked);
+    connect(ui.regLoginField, &QLineEdit::returnPressed, this, &wClient::regBtnClicked);
+    connect(ui.regPassField, &QLineEdit::returnPressed, this, &wClient::regBtnClicked);
+    connect(ui.regPassField2, &QLineEdit::returnPressed, this, &wClient::regBtnClicked);
+
+    connect(ui.loginBtn, &QPushButton::clicked, this, &wClient::loginBtnClicked);
+    connect(ui.loginField, &QLineEdit::returnPressed, this, &wClient::loginBtnClicked);
+    connect(ui.passwordField, &QLineEdit::returnPressed, this, &wClient::loginBtnClicked);
+
     connect(ui.sendBtn, &QPushButton::clicked, this, &wClient::sendMessage);
+    connect(ui.iField, &QLineEdit::returnPressed, this, &wClient::sendMessage);
+
+    connect(ui.nameChangeBtn, &QPushButton::clicked, this, &wClient::changeNameClicked);
+
+    connect(ui.logoutBtn, &QPushButton::clicked, this, &wClient::logoutBtnClicked);
+
 }
 
 void wClient::setupClient() {
@@ -55,6 +60,8 @@ void wClient::setupClient() {
         ui.loginBtn->setEnabled(true);
         ui.registerBtn->setEnabled(true);
         ui.regBtn->setEnabled(true);
+        ui.sendBtn->setEnabled(true);
+        ui.statusField3->hide();
         });
 
     connect(&socket, &QTcpSocket::readyRead, this, [this]() {
@@ -103,6 +110,7 @@ void wClient::onErrorOccured(QAbstractSocket::SocketError error) {
     ui.registerBtn->setEnabled(false);
     ui.regBtn->setEnabled(false);
     ui.loginBtn->setEnabled(false);
+    ui.sendBtn->setEnabled(false);
 
     switch (error)
     {
@@ -121,7 +129,10 @@ void wClient::onErrorOccured(QAbstractSocket::SocketError error) {
     }
     if (currPageIndex == 0) ui.infoLabel->setText(errInfo);
     else if (currPageIndex == 1) ui.infoLabel2->setText(errInfo);
-    else return;
+    else {
+        ui.statusField3->setText(errInfo);
+        ui.statusField3->show();
+    }
 }
 
 void wClient::processServerResponse(const QByteArray& utf8msg) {
