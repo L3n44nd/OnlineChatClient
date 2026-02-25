@@ -199,6 +199,10 @@ void wClient::processServerResponse(const QByteArray& utf8msg) {
     case serverResponse::NameTooLong:
         emit nameChangeRejected(toStr(serverResponse::NameTooLong));
         break;
+    case serverResponse::AlreadyAuthorized:
+        ui.statusLabel->setStyleSheet("color: #ffaa00; font: 700 9pt 'Century Gothic'");
+        ui.statusLabel->setText(toStr(serverResponse::AlreadyAuthorized));
+        break;
     case serverResponse::Message: {
         QString sender = data.section('\n', 0, 0);
         QString msg = data.section('\n', 1);
@@ -289,8 +293,20 @@ void wClient::logoutBtnClicked() {
     ui.passwordField->clear();
     ui.statusLabel->clear();
     ui.statusLabel2->clear();
-    ui.stackedWidget->setCurrentIndex(0);
     ui.chatField->clear();
+    ui.stackedWidget->setCurrentIndex(0);
+    idToTabIndex.clear();
+    idToField.clear();
+    onlineUsers.clear();
+    ui.regLoginField->clear();
+    ui.regPassField->clear();
+    ui.regPassField2->clear();
+    ui.iField->clear();
+
+    for (auto& tab : tabIndexToId.keys()) {
+        ui.tabChat->removeTab(tab);
+    }
+    tabIndexToId.clear();
 
     sendPacket(clientQuery::Logout);
 }
@@ -304,7 +320,10 @@ void wClient::privateMsgBtnClicked(const QString& username) {
 
         oField->setReadOnly(true);
         oField->setFixedSize(680, 460);
-            
+        oField->setStyleSheet(
+            "background-color: rgb(140, 127, 108);"
+            "color: rgb(220, 211, 192);"
+        );         
         int index = ui.tabChat->addTab(newTab, username);
         idToTabIndex[recipientId] = index;
         tabIndexToId[index] = recipientId;
@@ -316,13 +335,13 @@ void wClient::privateMsgBtnClicked(const QString& username) {
 }
 
 void wClient::handleMessage(QString senderName, QString msg) {
-    QString textForChat = QString("<font color='#4a875d'>%1</font>: %2").arg(senderName).arg(msg);
+    QString textForChat = QString("<font color='#3b2e24'>%1:</font> %2").arg(senderName).arg(msg);
     ui.chatField->append(textForChat);
 }
 
 void wClient::handlePrivateMessage(QString senderId, QString senderName, QString msg) {
-    QString textForChat = QString("<font color='#4a875d'>%1</font>: %2").arg(senderName).arg(msg);
-    if (idToField.find(senderId.toInt()) != idToField.end()) {
+    QString textForChat = QString("<font color='#3b2e24'>%1</font>: %2").arg(senderName).arg(msg);
+    if (idToTabIndex.find(senderId.toInt()) != idToTabIndex.end()) {
         QTextEdit* targetField = idToField[senderId.toInt()];
         targetField->append(textForChat);
     }
@@ -332,12 +351,17 @@ void wClient::handlePrivateMessage(QString senderId, QString senderName, QString
 
         oField->setReadOnly(true);
         oField->setFixedSize(680, 460);
-        oField->append(textForChat);
+        oField->setStyleSheet(
+            "background-color: rgb(140, 127, 108);"
+            "color: rgb(220, 211, 192);"
+        );
 
         int index = ui.tabChat->addTab(newTab, senderName);
         idToTabIndex[senderId.toInt()] = index;
         tabIndexToId[index] = senderId.toInt();
         idToField[senderId.toInt()] = oField;
+
+        sendPacket(clientQuery::GetHistory, senderId);
     }
 }
 
@@ -349,7 +373,7 @@ void wClient::sendMessage() {
     }
 
     QString selfName = ui.nameField->text();
-    QString textForChat = QString("<font color='#ff0033'>%1 (Вы):</font> %2").arg(selfName).arg(textFromField);
+    QString textForChat = QString("<font color='#aa0000'>%1 (Вы):</font> %2").arg(selfName).arg(textFromField);
 
     if (ui.tabChat->currentIndex() == 0) {
         sendPacket(clientQuery::Message, textFromField);
@@ -379,32 +403,31 @@ void wClient::updateOnline(const QString& onlineList) {
 
     QStringList parts = onlineList.split("\n\n");
     int selfId = (ui.uidField->text()).toInt();
-    ui.listOnline->clear();
+
     onlineUsers.clear();
+    cleanUpLayout(ui.onlineLayout);
 
     for (int i = 0; i < parts.size(); ++i) {
         int userId = parts[i].section('\n', 0, 0).toInt();
+        if (selfId == userId) continue;
+
         QString username = parts[i].section('\n', 1);
         onlineUsers[username] = userId;
         if (idToTabIndex.contains(userId)) ui.tabChat->setTabText(idToTabIndex[userId], username);
 
-        QListWidgetItem* item = new QListWidgetItem(ui.listOnline);       
         QPushButton* writeBtn = new QPushButton(username, this);
-        writeBtn->setFixedSize(185, 20);
-        writeBtn->setStyleSheet("font: 700 9pt 'Century Gothic';"); 
-
-        if (selfId != userId) {
-            connect(writeBtn, &QPushButton::clicked, this, [username, this]() {
-                privateMsgBtnClicked(username);
-                });
-            writeBtn->setStyleSheet(
-                "font: 700 9pt 'Century Gothic';"
-                "background-color: rgb(115, 115, 86);"
-                "color: rgb(39, 39, 28);");
-        }
-        else writeBtn->setEnabled(false);
-        item->setSizeHint(writeBtn->size());
-        ui.listOnline->setItemWidget(item, writeBtn);
+        connect(writeBtn, &QPushButton::clicked, this, [username, this]() {
+            privateMsgBtnClicked(username);
+            });
+        writeBtn->setStyleSheet(
+            "font: 700 9pt 'Century Gothic';"
+            "color: rgb(255, 231, 197);"
+            "background-color: rgb(126, 114, 97);"
+            "border: none;"
+        );
+        writeBtn->setFixedSize(180, 20);
+        ui.onlineLayout->addWidget(writeBtn);
+        ui.onlineLayout->addStretch();
     }
 }
 
@@ -416,8 +439,8 @@ void wClient::loadHistory(const QString& history, QTextEdit* field) {
         QString senderName = parts[i].section('\n', 1, 1);
         QString msg = parts[i].section('\n', 2);
 
-        if (senderId == ui.uidField->text().toInt()) field->append(QString("<font color='#ff0033'>%1 (Вы):</font> %2").arg(senderName).arg(msg));
-        else field->append(QString("<font color='#4a875d'>%1:</font> %2").arg(senderName).arg(msg));
+        if (senderId == ui.uidField->text().toInt()) field->append(QString("<font color='#aa0000'>%1 (Вы):</font> %2").arg(senderName).arg(msg));
+        else field->append(QString("<font color='#3b2e24'>%1:</font> %2").arg(senderName).arg(msg));
     }
 }
 
@@ -426,6 +449,14 @@ void wClient::highlightFieldErr(QLineEdit* field) {
     QTimer::singleShot(2000, field, [field]() {
         field->setStyleSheet("");
         });
+}
+
+void wClient::cleanUpLayout(QLayout* layout) {
+    for (int i = layout->count() - 1; i >= 0; --i) {
+        QLayoutItem* item = layout->itemAt(i);
+        delete item->widget();
+        delete layout->takeAt(i);
+    }
 }
 
 wClient::~wClient() {}

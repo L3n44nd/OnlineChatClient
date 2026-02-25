@@ -48,9 +48,11 @@ private:
     QHash<QString, int> onlineUsers;
     QHash<int, QTextEdit*> idToField;
     QHash<int, int> idToTabIndex;
+    QHash<int, int> tabIndexToId;
 
     void setupUI();
     void setupClient();
     void setupTimer(); 
+    void cleanUpLayout(QLayout* layout);
 };
 
