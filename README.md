@@ -56,3 +56,4 @@ QHash<int, int> tabIndexToId;  // индекс вкладки -> ID пользо
    ```
      - окно смены имени выводит пользователю результат (имя изменено/имя занято/и т.д.)
     
+Скачать сборку под Windows: https://github.com/L3n44nd/OnlineChatClient/releases/download/v1.0.0/OnlineChatClient.zip
