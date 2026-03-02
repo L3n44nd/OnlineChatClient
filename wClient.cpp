@@ -12,11 +12,11 @@ wClient::wClient(QWidget *parent)
 
 void wClient::setupUI() {
 
-    
     ui.setupUi(this);
     this->setLayout(ui.mainLayout);
     ui.statusField3->setParent(ui.tabChat);
     ui.stackedWidget->setCurrentIndex(0);
+    ui.iField->setMaxLength(500);
 
     connect(ui.registerBtn, &QPushButton::clicked, this, [this]() {
         ui.stackedWidget->setCurrentIndex(1);
@@ -445,9 +445,11 @@ void wClient::loadHistory(const QString& history, QTextEdit* field) {
 }
 
 void wClient::highlightFieldErr(QLineEdit* field) {
-    field->setStyleSheet("border: 1px solid red;");
-    QTimer::singleShot(2000, field, [field]() {
-        field->setStyleSheet("");
+    QString fieldStyle = field->styleSheet();
+    QString err = fieldStyle + "border: 2px solid #b90031; border-radius: 3px";
+    field->setStyleSheet(err);
+    QTimer::singleShot(2000, field, [field, fieldStyle]() {
+        field->setStyleSheet(fieldStyle);
         });
 }
 
