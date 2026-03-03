@@ -17,6 +17,10 @@ void wClient::setupUI() {
     ui.statusField3->setParent(ui.tabChat);
     ui.stackedWidget->setCurrentIndex(0);
     ui.iField->setMaxLength(500);
+    ui.loginField->setMaxLength(15);
+    ui.passwordField->setMaxLength(100);
+    ui.regLoginField->setMaxLength(15);
+    ui.regPassField->setMaxLength(100);
 
     connect(ui.registerBtn, &QPushButton::clicked, this, [this]() {
         ui.stackedWidget->setCurrentIndex(1);
@@ -88,7 +92,7 @@ void wClient::setupClient() {
         emit connectionLost();
         });
 
-    socket.connectToHost(QHostAddress::LocalHost, 1402);
+    socket.connectToHost(QHostAddress::LocalHost, 1403);
 }
 
 void wClient::setupTimer() {
@@ -97,7 +101,7 @@ void wClient::setupTimer() {
     connect(reconnectTimer, &QTimer::timeout, this, [this]() {
         int currPageIndex = ui.stackedWidget->currentIndex();
         if (socket.state() == QTcpSocket::UnconnectedState) {
-            socket.connectToHost(QHostAddress::LocalHost, 1402);
+            socket.connectToHost(QHostAddress::LocalHost, 1403);
             if (currPageIndex == 0) ui.infoLabel->setText("Попытка подключения...");
             else if (currPageIndex == 1) ui.infoLabel2->setText("Попытка подключения...");
         }
