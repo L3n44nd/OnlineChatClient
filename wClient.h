@@ -5,7 +5,10 @@
 #include <QTabWidget>
 #include <qtimer.h>
 #include "ui_wClient.h"
+#include <qvalidator.h>
+#include <qregularexpression.h>
 #include "\repos\wServer\Common\protocol.h"
+
 
 class wClient : public QWidget
 {
@@ -20,7 +23,6 @@ signals:
     void nameChangeAccepted(QString info);
     void nameChangeRejected(QString reason);
     void connectionLost();
-    void connectionRestored();
 
 private slots:
     void processServerResponse(const QByteArray& utf8msg);
@@ -54,5 +56,6 @@ private:
     void setupClient();
     void setupTimer(); 
     void cleanUpLayout(QLayout* layout);
+    void cleanUpTabs();
 };
 

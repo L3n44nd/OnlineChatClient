@@ -14,13 +14,12 @@ void wClient::setupUI() {
 
     ui.setupUi(this);
     this->setLayout(ui.mainLayout);
-    ui.statusField3->setParent(ui.tabChat);
     ui.stackedWidget->setCurrentIndex(0);
-    ui.iField->setMaxLength(500);
-    ui.loginField->setMaxLength(15);
-    ui.passwordField->setMaxLength(100);
-    ui.regLoginField->setMaxLength(15);
-    ui.regPassField->setMaxLength(100);
+
+    QRegularExpression expr("[^\\\\]*");
+    ui.iField->setValidator(new QRegularExpressionValidator(expr, ui.iField));
+    ui.loginField->setValidator(new QRegularExpressionValidator(expr, ui.loginField));
+    ui.regLoginField->setValidator(new QRegularExpressionValidator(expr, ui.regLoginField));
 
     connect(ui.registerBtn, &QPushButton::clicked, this, [this]() {
         ui.stackedWidget->setCurrentIndex(1);
@@ -31,13 +30,12 @@ void wClient::setupUI() {
         });
 
     connect(ui.tabChat, &QTabWidget::tabCloseRequested, this, [this](int index) {
-        if (index != 0) {
-            QString username = ui.tabChat->tabText(index);
+        if (index != 0) { 
             int userId = tabIndexToId[index];
             tabIndexToId.remove(index);
-            ui.tabChat->removeTab(index);
             idToTabIndex.remove(userId);
             idToField.remove(userId);
+            ui.tabChat->removeTab(index);
         }
         });
 
@@ -62,21 +60,19 @@ void wClient::setupUI() {
 void wClient::setupClient() {
     connect(&socket, &QTcpSocket::connected, this, [this]() {
         reconnectTimer->stop();
-        emit connectionRestored();
         ui.infoLabel->clear();
-        ui.infoLabel2->clear();
         ui.loginBtn->setEnabled(true);
         ui.registerBtn->setEnabled(true);
         ui.regBtn->setEnabled(true);
-        ui.sendBtn->setEnabled(true);
-        ui.statusField3->hide();
         });
 
     connect(&socket, &QTcpSocket::readyRead, this, [this]() {
         while (true) {
             if (waitingForDataSize) {
                 if (socket.bytesAvailable() < 4) return;
-                sizeOfData = (socket.read(4)).toInt();
+                QByteArray sizeBytes = socket.read(4);
+                QDataStream stream(sizeBytes);
+                stream >> sizeOfData;
                 waitingForDataSize = false;
             }
             else {
@@ -99,27 +95,26 @@ void wClient::setupTimer() {
     reconnectTimer = new QTimer(this);
     reconnectTimer->setInterval(3000);
     connect(reconnectTimer, &QTimer::timeout, this, [this]() {
-        int currPageIndex = ui.stackedWidget->currentIndex();
         if (socket.state() == QTcpSocket::UnconnectedState) {
             socket.connectToHost(QHostAddress::LocalHost, 1403);
-            if (currPageIndex == 0) ui.infoLabel->setText("Попытка подключения...");
-            else if (currPageIndex == 1) ui.infoLabel2->setText("Попытка подключения...");
+            ui.infoLabel->setText("Попытка подключения...");
         }
         });
 }
 
 void wClient::onErrorOccured(QAbstractSocket::SocketError error) {
-    QString errInfo;
-    int currPageIndex = ui.stackedWidget->currentIndex();
-
     emit connectionLost();
     reconnectTimer->start();
 
-    ui.registerBtn->setEnabled(false);
-    ui.regBtn->setEnabled(false);
-    ui.loginBtn->setEnabled(false);
-    ui.sendBtn->setEnabled(false);
+    ui.statusLabel->clear();
+    ui.statusLabel2->clear();
+    ui.chatField->clear();
+    ui.regLoginField->clear();
+    ui.regPassField->clear();
+    ui.regPassField2->clear();
+    ui.iField->clear();
 
+    QString errInfo;
     switch (error)
     {
     case QAbstractSocket::ConnectionRefusedError:
@@ -135,12 +130,10 @@ void wClient::onErrorOccured(QAbstractSocket::SocketError error) {
         errInfo = "Не удалось подключиться к серверу.";
         break;
     }
-    if (currPageIndex == 0) ui.infoLabel->setText(errInfo);
-    else if (currPageIndex == 1) ui.infoLabel2->setText(errInfo);
-    else {
-        ui.statusField3->setText(errInfo);
-        ui.statusField3->show();
-    }
+    ui.infoLabel->setText(errInfo);
+
+    ui.stackedWidget->setCurrentIndex(0);
+    cleanUpTabs();
 }
 
 void wClient::processServerResponse(const QByteArray& utf8msg) {
@@ -200,9 +193,6 @@ void wClient::processServerResponse(const QByteArray& utf8msg) {
         }
         else emit nameChangeRejected(toStr(serverResponse::UsernameExists));
         break;
-    case serverResponse::NameTooLong:
-        emit nameChangeRejected(toStr(serverResponse::NameTooLong));
-        break;
     case serverResponse::AlreadyAuthorized:
         ui.statusLabel->setStyleSheet("color: #ffaa00; font: 700 9pt 'Century Gothic'");
         ui.statusLabel->setText(toStr(serverResponse::AlreadyAuthorized));
@@ -242,6 +232,7 @@ void wClient::processServerResponse(const QByteArray& utf8msg) {
 void wClient::loginBtnClicked() {
     QString username = ui.loginField->text();
     QString password = ui.passwordField->text();
+
     bool hasErr = false;
 
     if (username.isEmpty()) {
@@ -293,32 +284,42 @@ void wClient::changeNameClicked() {
 }
 
 void wClient::logoutBtnClicked() {
+    socket.disconnectFromHost();
+
+    cleanUpTabs();
     ui.loginField->clear();
     ui.passwordField->clear();
     ui.statusLabel->clear();
     ui.statusLabel2->clear();
     ui.chatField->clear();
-    ui.stackedWidget->setCurrentIndex(0);
-    idToTabIndex.clear();
-    idToField.clear();
-    onlineUsers.clear();
     ui.regLoginField->clear();
     ui.regPassField->clear();
     ui.regPassField2->clear();
     ui.iField->clear();
 
-    for (auto& tab : tabIndexToId.keys()) {
-        ui.tabChat->removeTab(tab);
+    ui.stackedWidget->setCurrentIndex(0);
+    reconnectTimer->start();
+}
+
+void wClient::cleanUpTabs() {
+    if (tabIndexToId.isEmpty()) return;
+
+    QList<int> tabIndexes = tabIndexToId.keys();
+    std::sort(tabIndexes.begin(), tabIndexes.end());
+
+    for (int i = tabIndexes.size() - 1; i >= 0; --i) {
+        ui.tabChat->removeTab(tabIndexes[i]);
     }
     tabIndexToId.clear();
-
-    sendPacket(clientQuery::Logout);
+    onlineUsers.clear();
+    idToField.clear();
+    idToTabIndex.clear();
 }
 
 void wClient::privateMsgBtnClicked(const QString& username) {
     int recipientId = onlineUsers[username];
 
-    if (idToTabIndex.find(recipientId) == idToTabIndex.end()) {
+    if (!idToTabIndex.contains(recipientId)) {
         QWidget* newTab = new QWidget(this);
         QTextEdit* oField = new QTextEdit(newTab);
 
@@ -345,7 +346,7 @@ void wClient::handleMessage(QString senderName, QString msg) {
 
 void wClient::handlePrivateMessage(QString senderId, QString senderName, QString msg) {
     QString textForChat = QString("<font color='#3b2e24'>%1</font>: %2").arg(senderName).arg(msg);
-    if (idToTabIndex.find(senderId.toInt()) != idToTabIndex.end()) {
+    if (idToTabIndex.contains(senderId.toInt())) {
         QTextEdit* targetField = idToField[senderId.toInt()];
         targetField->append(textForChat);
     }
@@ -397,13 +398,16 @@ void wClient::sendPacket(const clientQuery query, const QString& data) {
     int queryCode = static_cast<int>(query);
     QString formatedData = data.isEmpty() ? QString::number(queryCode) : QString("%1 %2").arg(queryCode).arg(data);
     QByteArray bArrData = formatedData.toUtf8();
-    int dataSize = bArrData.size();
-    QByteArray packet = QByteArray::number(dataSize).rightJustified(4, '0') + bArrData;
+
+    qint32 dataSize = bArrData.size();
+    QByteArray packet;
+    QDataStream stream(&packet, QIODeviceBase::WriteOnly);
+    stream << dataSize;
+    packet += bArrData;
     socket.write(packet);
 }
 
 void wClient::updateOnline(const QString& onlineList) {
-    if (onlineList.isEmpty()) return;
 
     QStringList parts = onlineList.split("\n\n");
     int selfId = (ui.uidField->text()).toInt();
