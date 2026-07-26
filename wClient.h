@@ -43,7 +43,7 @@ private slots:
 
 private:
     bool waitingForDataSize = true;
-    int sizeOfData = 0;
+    qint32 sizeOfData = 0;
     Ui::wClientClass ui;
     QTcpSocket socket;
     QTimer* reconnectTimer;
