@@ -30,12 +30,20 @@ void wClient::setupUI() {
         });
 
     connect(ui.tabChat, &QTabWidget::tabCloseRequested, this, [this](int index) {
-        if (index != 0) { 
-            int userId = tabIndexToId[index];
-            tabIndexToId.remove(index);
-            idToTabIndex.remove(userId);
-            idToField.remove(userId);
-            ui.tabChat->removeTab(index);
+        if (index == 0) return;
+        
+        int userId = tabIndexToId[index];
+        idToField.remove(userId);
+        idToTabIndex.remove(userId);
+        ui.tabChat->removeTab(index);
+
+        for (auto id : idToTabIndex.keys()) {
+            if (idToTabIndex[id] > index) --idToTabIndex[id];
+        }
+
+        tabIndexToId.clear();
+        for (auto [id, tabIndex] : idToTabIndex.asKeyValueRange()) {
+            tabIndexToId[tabIndex] = id;
         }
         });
 
@@ -304,14 +312,11 @@ void wClient::logoutBtnClicked() {
 void wClient::cleanUpTabs() {
     if (tabIndexToId.isEmpty()) return;
 
-    QList<int> tabIndexes = tabIndexToId.keys();
-    std::sort(tabIndexes.begin(), tabIndexes.end());
-
-    for (int i = tabIndexes.size() - 1; i >= 0; --i) {
-        ui.tabChat->removeTab(tabIndexes[i]);
+    int numOfTabs = tabIndexToId.size();
+    for (int i = numOfTabs - 1; i >= 0; --i) {
+        ui.tabChat->removeTab(i);
     }
     tabIndexToId.clear();
-    onlineUsers.clear();
     idToField.clear();
     idToTabIndex.clear();
 }
@@ -344,10 +349,12 @@ void wClient::handleMessage(QString senderName, QString msg) {
     ui.chatField->append(textForChat);
 }
 
-void wClient::handlePrivateMessage(QString senderId, QString senderName, QString msg) {
+void wClient::handlePrivateMessage(QString strSenderId, QString senderName, QString msg) {
     QString textForChat = QString("<font color='#3b2e24'>%1</font>: %2").arg(senderName).arg(msg);
-    if (idToTabIndex.contains(senderId.toInt())) {
-        QTextEdit* targetField = idToField[senderId.toInt()];
+
+    int senderId = strSenderId.toInt();
+    if (idToTabIndex.contains(senderId)) {
+        QTextEdit* targetField = idToField[senderId];
         targetField->append(textForChat);
     }
     else {
@@ -362,11 +369,11 @@ void wClient::handlePrivateMessage(QString senderId, QString senderName, QString
         );
 
         int index = ui.tabChat->addTab(newTab, senderName);
-        idToTabIndex[senderId.toInt()] = index;
-        tabIndexToId[index] = senderId.toInt();
-        idToField[senderId.toInt()] = oField;
+        idToTabIndex[senderId] = index;
+        tabIndexToId[index] = senderId;
+        idToField[senderId] = oField;
 
-        sendPacket(clientQuery::GetHistory, senderId);
+        sendPacket(clientQuery::GetHistory, strSenderId);
     }
 }
 
