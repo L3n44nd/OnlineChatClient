@@ -9,7 +9,7 @@
   - отображение списка онлайн-пользователей
   - возможность смены имени пользователя
   - пользовательский интерфейс
-  - кастомный протокол
+  - кастомный протокол с бинарным префиксом
 
 1. Главное окно: 
     - управление стеком виджетов: переключение между страницами входа, регистрации и чата
@@ -30,30 +30,5 @@ QHash<int, int> tabIndexToId;  // индекс вкладки -> ID пользо
     - асинхронное чтение с контролем размера пакета
     - буферизация неполных данных
     - разбор по кодам операций в switch'е 
-
-4. Автоматическое переподключение
-    - при дисконнекте испускается сигнал и запускается таймер reconnectTimer c интервалом 3 секунды:
-       ```cpp
-       emit connectionLost();
-       reconnectTimer->start();
-       ```
-    - при потере соединения отключаются кнопки входа, регистрации и другие, при нажатии которых отправляется пакет
-
-5. Взаимодействие с окном смены имени
-     - при нажатии кнопки смены имени окно испускает сигнал `changeNameBtnClicked(ui.changeNameField->text())` с новым именем
-     - главное окно ловит сигнал и отправляет запрос на сервер:
-   ```cpp
-       connect(&dialog, &nameChangeDialog::changeNameBtnClicked, this, [this](QString newName) {
-    sendPacket(clientQuery::NameChange, newName);
-    });
-   ```
-     - при получении ответа от сервера испускается сигнал, который ловит дочернее окно:
-   ```cpp
-   case serverResponse::Successful:
-    emit nameChangeAccepted(toStr(serverResponse::Successful));
-    ui.nameField->setText(data);
-    break;
-   ```
-     - окно смены имени выводит пользователю результат (имя изменено/имя занято/и т.д.)
     
-Скачать сборку под Windows: https://github.com/L3n44nd/OnlineChatClient/releases/download/v1.0.2/OnlineChatClient.zip
+Скачать сборку под Windows: https://github.com/L3n44nd/OnlineChatClient/releases/download/v1.1.0/Client.zip
