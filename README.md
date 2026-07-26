@@ -31,4 +31,4 @@ QHash<int, int> tabIndexToId;  // индекс вкладки -> ID пользо
     - буферизация неполных данных
     - разбор по кодам операций в switch'е 
     
-Скачать сборку под Windows: https://github.com/L3n44nd/OnlineChatClient/releases/download/v1.1.0/Client.zip
+Скачать сборку под Windows: https://github.com/L3n44nd/OnlineChatClient/releases/download/v1.1.1/ChatClient.zip
